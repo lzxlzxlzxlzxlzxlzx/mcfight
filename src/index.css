@@ -1,0 +1,163 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: #1a1a2e;
+  color: #eee;
+}
+
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.gold-bar {
+  display: flex;
+  gap: 20px;
+  font-weight: 600;
+}
+
+.monster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+  max-height: 420px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.monster-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  background: #16213e;
+  border: 1px solid #334;
+  border-radius: 8px;
+  color: #eee;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.monster-card:hover:not(:disabled) {
+  border-color: #4a9eff;
+}
+
+.monster-card:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.monster-card img {
+  width: 40px;
+  height: 40px;
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+
+.primary {
+  padding: 10px 24px;
+  background: #4a9eff;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.picked-list {
+  margin-bottom: 12px;
+}
+
+.picked-list span {
+  display: inline-block;
+  margin: 4px 8px 4px 0;
+  padding: 4px 10px;
+  background: #0f3460;
+  border-radius: 6px;
+}
+
+.deploy-layout {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.deploy-pool button {
+  display: block;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 8px;
+  background: #16213e;
+  border: 1px solid #334;
+  color: #eee;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.deploy-pool button.selected {
+  border-color: #4a9eff;
+  background: #1a3a5c;
+}
+
+.field-clickable,
+.deploy-preview,
+.battle-canvas {
+  width: 100%;
+  border-radius: 8px;
+  border: 2px solid #334;
+}
+
+.deploy-preview {
+  aspect-ratio: 16 / 9;
+}
+
+.battle {
+  position: relative;
+}
+
+.battle-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.result-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 8px;
+}
+
+.result-overlay h2 {
+  font-size: 2rem;
+  margin-bottom: 16px;
+}

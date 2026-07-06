@@ -1,0 +1,6 @@
+node_modules/
+dist/
+scripts/.cache/
+*.tsbuildinfo
+node_modules/.tmp/
+node_modules/.vite/
