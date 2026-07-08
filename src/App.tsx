@@ -1,107 +1,138 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BattleCanvas } from './components/BattleCanvas'
-import { INITIAL_GOLD, MAX_UNITS_PER_TEAM, MONSTERS, MONSTER_MAP } from './data/monsters'
+import { MonsterConfigPanel } from './components/MonsterConfigPanel'
+import { BULK_BUY_COUNT, INITIAL_GOLD, MONSTERS, MONSTER_MAP } from './data/monsters'
+import { getUnitVisualHalfExtent } from './game/field'
 import { createBattleFromDeployments, createDeployId, stepBattle } from './game/battleEngine'
 import type { DeployedUnit, GameState } from './game/types'
 
 const FIELD_W = 960
 const FIELD_H = 540
-import { aiBuy, aiBuyTotal } from './game/aiShop'
-
-function aiDeploy(team: 0 | 1, monsterIds: string[]): DeployedUnit[] {
-  const cols = Math.min(monsterIds.length, 3)
-  return monsterIds.map((monsterId, i) => {
-    const col = i % cols
-    const row = Math.floor(i / cols)
-    const x = team === 0 ? 140 + col * 90 : FIELD_W - 140 - col * 90
-    const y = 120 + row * 100 + (col % 2) * 20
-    return { id: createDeployId(), monsterId, team, x, y }
-  })
-}
 
 function createInitialState(): GameState {
-  const aiPicks = aiBuy(INITIAL_GOLD)
-  const aiCost = aiBuyTotal(aiPicks)
   return {
     phase: 'shop',
-    gold: [INITIAL_GOLD, INITIAL_GOLD - aiCost],
-    shop: aiPicks.map((p) => ({ monsterId: p.monsterId, team: 1 })),
+    gold: [INITIAL_GOLD, INITIAL_GOLD],
+    shop: [],
     deployed: [],
     battle: null,
     winner: null,
   }
 }
 
+function summarizeUnits(units: { monsterId: string }[]) {
+  const counts = new Map<string, number>()
+  for (const u of units) counts.set(u.monsterId, (counts.get(u.monsterId) ?? 0) + 1)
+  return [...counts.entries()].map(([id, n]) => ({
+    monsterId: id,
+    name: MONSTER_MAP[id].name,
+    count: n,
+  }))
+}
+
 export default function App() {
+  const [view, setView] = useState<'game' | 'config'>('game')
   const [state, setState] = useState<GameState>(createInitialState)
-  const [selectedMonster, setSelectedMonster] = useState<string | null>(null)
+  const [activeTeam, setActiveTeam] = useState<0 | 1>(0)
+  const [selectedMonsterId, setSelectedMonsterId] = useState<string | null>(null)
 
-  const playerUnits = useMemo(
-    () => state.shop.filter((s) => s.team === 0),
-    [state.shop],
-  )
+  const team0Pool = useMemo(() => state.shop.filter((s) => s.team === 0), [state.shop])
+  const team1Pool = useMemo(() => state.shop.filter((s) => s.team === 1), [state.shop])
+  const activePool = activeTeam === 0 ? team0Pool : team1Pool
 
-  const buyMonster = (monsterId: string) => {
+  const team0Summary = useMemo(() => summarizeUnits(team0Pool), [team0Pool])
+  const team1Summary = useMemo(() => summarizeUnits(team1Pool), [team1Pool])
+  const activeSummary = activeTeam === 0 ? team0Summary : team1Summary
+
+  const buyMonster = (monsterId: string, count: number) => {
     const def = MONSTER_MAP[monsterId]
     setState((prev) => {
       if (prev.phase !== 'shop') return prev
-      const playerCount = prev.shop.filter((s) => s.team === 0).length
-      if (playerCount >= MAX_UNITS_PER_TEAM) return prev
-      if (prev.gold[0] < def.price) return prev
+      let gold = prev.gold[activeTeam]
+      const newUnits: GameState['shop'] = []
+      for (let i = 0; i < count; i++) {
+        if (gold < def.price) break
+        gold -= def.price
+        newUnits.push({ id: createDeployId(), monsterId, team: activeTeam })
+      }
+      if (newUnits.length === 0) return prev
+      const nextGold: [number, number] = [...prev.gold] as [number, number]
+      nextGold[activeTeam] = gold
       return {
         ...prev,
-        gold: [prev.gold[0] - def.price, prev.gold[1]],
-        shop: [...prev.shop, { monsterId, team: 0 }],
+        gold: nextGold,
+        shop: [...prev.shop, ...newUnits],
       }
     })
   }
 
+  const canStartDeploy = team0Pool.length > 0 && team1Pool.length > 0
+
   const startDeploy = () => {
-    if (playerUnits.length === 0) return
+    if (!canStartDeploy) return
     setState((prev) => ({ ...prev, phase: 'deploy' }))
+    setActiveTeam(0)
+    setSelectedMonsterId(null)
   }
 
   const placeUnit = useCallback(
     (x: number, y: number) => {
-      if (!selectedMonster) return
+      if (!selectedMonsterId) return
+      const onLeft = x <= FIELD_W / 2 - 30
+      const onRight = x >= FIELD_W / 2 + 30
+      if (activeTeam === 0 && !onLeft) return
+      if (activeTeam === 1 && !onRight) return
+
       setState((prev) => {
         if (prev.phase !== 'deploy') return prev
-        const idx = prev.shop.findIndex((s) => s.team === 0 && s.monsterId === selectedMonster)
-        if (idx < 0) return prev
-        if (x > FIELD_W / 2 - 30) return prev
+        const shopIndex = prev.shop.findIndex(
+          (s) => s.team === activeTeam && s.monsterId === selectedMonsterId,
+        )
+        if (shopIndex < 0) return prev
+
+        const unit = prev.shop[shopIndex]
         const nextShop = [...prev.shop]
-        nextShop.splice(idx, 1)
+        nextShop.splice(shopIndex, 1)
+
+        const def = MONSTER_MAP[unit.monsterId]
+        const half = getUnitVisualHalfExtent(def?.tags ?? [])
+        const cx = Math.max(half, Math.min(FIELD_W - half, x))
+        const cy = Math.max(half, Math.min(FIELD_H - half, y))
+
         const deployed: DeployedUnit = {
           id: createDeployId(),
-          monsterId: selectedMonster,
-          team: 0,
-          x,
-          y,
+          monsterId: unit.monsterId,
+          team: activeTeam,
+          x: cx,
+          y: cy,
         }
+
+        const hasMore = nextShop.some(
+          (s) => s.team === activeTeam && s.monsterId === unit.monsterId,
+        )
+        setSelectedMonsterId(hasMore ? unit.monsterId : null)
+
         return {
           ...prev,
           shop: nextShop,
           deployed: [...prev.deployed, deployed],
         }
       })
-      setSelectedMonster(null)
     },
-    [selectedMonster],
+    [selectedMonsterId, activeTeam],
   )
 
+  const allDeployed = team0Pool.length === 0 && team1Pool.length === 0
+
   const startBattle = () => {
-    setState((prev) => {
-      const aiUnits = prev.shop.filter((s) => s.team === 1).map((s) => s.monsterId)
-      const aiDeployed = aiDeploy(1, aiUnits)
-      const allDeployed = [...prev.deployed, ...aiDeployed]
-      return {
-        ...prev,
-        phase: 'battle',
-        shop: [],
-        deployed: allDeployed,
-        battle: createBattleFromDeployments(allDeployed),
-      }
-    })
+    if (!allDeployed) return
+    setState((prev) => ({
+      ...prev,
+      phase: 'battle',
+      shop: [],
+      battle: createBattleFromDeployments(prev.deployed),
+    }))
+    setSelectedMonsterId(null)
   }
 
   useEffect(() => {
@@ -119,7 +150,11 @@ export default function App() {
     return () => clearInterval(timer)
   }, [state.phase, state.battle?.winner])
 
-  const reset = () => setState(createInitialState())
+  const reset = () => {
+    setState(createInitialState())
+    setActiveTeam(0)
+    setSelectedMonsterId(null)
+  }
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (state.phase !== 'deploy') return
@@ -133,78 +168,135 @@ export default function App() {
     <div className="app">
       <header className="header">
         <h1>MC Fight Arena</h1>
-        <div className="gold-bar">
-          <span>我方金币: {state.gold[0]}</span>
-          <span>敌方金币: {state.gold[1]}</span>
+        <div className="header-actions">
+          <nav className="view-tabs">
+            <button
+              type="button"
+              className={view === 'game' ? 'active' : ''}
+              onClick={() => setView('game')}
+            >
+              对战
+            </button>
+            <button
+              type="button"
+              className={view === 'config' ? 'active' : ''}
+              onClick={() => setView('config')}
+            >
+              数值配置
+            </button>
+          </nav>
+          {view === 'game' && (
+            <div className="gold-bar">
+              <span className="team-gold team0">蓝方金币: {state.gold[0]}</span>
+              <span className="team-gold team1">红方金币: {state.gold[1]}</span>
+            </div>
+          )}
         </div>
       </header>
 
-      {state.phase === 'shop' && (
+      {view === 'config' && <MonsterConfigPanel />}
+
+      {view === 'game' && state.phase === 'shop' && (
         <section className="shop">
-          <h2>选购怪物（最多 {MAX_UNITS_PER_TEAM} 只）</h2>
-          <p>已选 {playerUnits.length} 只 · 电脑已选好敌方阵容</p>
+          <h2>选购怪物（双方各自用金币购买）</h2>
+          <TeamSwitcher team={activeTeam} onChange={setActiveTeam} />
+          <p>
+            当前配置 <strong>{activeTeam === 0 ? '蓝方' : '红方'}</strong>
+            ，已选 {activePool.length} 只
+          </p>
           <div className="monster-grid">
-            {MONSTERS.map((m) => (
-              <button
-                key={m.id}
-                className="monster-card"
-                disabled={state.gold[0] < m.price || playerUnits.length >= MAX_UNITS_PER_TEAM}
-                onClick={() => buyMonster(m.id)}
-              >
-                <img src={`/assets/monsters/${m.id}/idle.png`} alt={m.name} />
-                <strong>{m.name}</strong>
-                <span>{m.price}G</span>
-                <small>{m.hp}HP / {m.attack}ATK</small>
-              </button>
-            ))}
+            {MONSTERS.map((m) => {
+              const gold = state.gold[activeTeam]
+              const canAfford = gold >= m.price
+              const maxBatch = Math.min(BULK_BUY_COUNT, Math.floor(gold / m.price))
+              return (
+                <div key={m.id} className={`monster-card${canAfford ? '' : ' disabled'}`}>
+                  <img src={`/assets/monsters/${m.id}/idle.png`} alt={m.name} />
+                  <strong>{m.name}</strong>
+                  <span>{m.price}G</span>
+                  <small>{m.hp}HP / {m.attack}ATK</small>
+                  <div className="buy-actions">
+                    <button type="button" disabled={!canAfford} onClick={() => buyMonster(m.id, 1)}>
+                      +1
+                    </button>
+                    <button
+                      type="button"
+                      disabled={maxBatch <= 0}
+                      onClick={() => buyMonster(m.id, maxBatch)}
+                    >
+                      +{maxBatch > 0 ? maxBatch : BULK_BUY_COUNT}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
-          <div className="picked-list">
-            <h3>我方阵容</h3>
-            {playerUnits.map((u, i) => (
-              <span key={`${u.monsterId}-${i}`}>{MONSTER_MAP[u.monsterId].name}</span>
-            ))}
+          <div className="picked-list dual">
+            <div>
+              <h3>蓝方阵容</h3>
+              {team0Summary.length === 0 && <span className="empty-pick">未选购</span>}
+              {team0Summary.map((g) => (
+                <span key={g.monsterId} className="pick-tag team0">{g.name}×{g.count}</span>
+              ))}
+            </div>
+            <div>
+              <h3>红方阵容</h3>
+              {team1Summary.length === 0 && <span className="empty-pick">未选购</span>}
+              {team1Summary.map((g) => (
+                <span key={g.monsterId} className="pick-tag team1">{g.name}×{g.count}</span>
+              ))}
+            </div>
           </div>
-          <button className="primary" disabled={playerUnits.length === 0} onClick={startDeploy}>
+          <button className="primary" disabled={!canStartDeploy} onClick={startDeploy}>
             进入部署
           </button>
+          {!canStartDeploy && (
+            <p className="phase-hint">蓝方与红方各至少选购 1 只怪物后可部署</p>
+          )}
         </section>
       )}
 
-      {state.phase === 'deploy' && (
+      {view === 'game' && state.phase === 'deploy' && (
         <section className="deploy">
-          <h2>部署阶段 — 点击左侧半场放置怪物</h2>
+          <h2>部署阶段 — 切换阵营后点击对应半场放置</h2>
+          <TeamSwitcher team={activeTeam} onChange={(t) => { setActiveTeam(t); setSelectedMonsterId(null) }} />
+          <p className="deploy-hint">
+            正在部署 <strong className={activeTeam === 0 ? 'team0' : 'team1'}>{activeTeam === 0 ? '蓝方（左半场）' : '红方（右半场）'}</strong>
+            ，剩余 {activePool.length} 只待放
+          </p>
           <div className="deploy-layout">
-            <div className="deploy-pool">
-              {state.shop.filter((s) => s.team === 0).map((s, i) => (
+            <div className={`deploy-pool ${activeTeam === 1 ? 'enemy-pool' : ''}`}>
+              {activeSummary.length === 0 && <span className="empty-pick">该阵营已放完</span>}
+              {activeSummary.map((g) => (
                 <button
-                  key={`${s.monsterId}-${i}`}
-                  className={selectedMonster === s.monsterId ? 'selected' : ''}
-                  onClick={() => setSelectedMonster(s.monsterId)}
+                  key={g.monsterId}
+                  className={selectedMonsterId === g.monsterId ? 'selected' : ''}
+                  onClick={() => setSelectedMonsterId(g.monsterId)}
                 >
-                  {MONSTER_MAP[s.monsterId].name}
+                  {g.name}×{g.count}
                 </button>
               ))}
             </div>
             <div className="field-clickable" onClick={handleCanvasClick}>
-              <DeployPreview deployed={state.deployed} />
+              <DeployPreview deployed={state.deployed} activeTeam={activeTeam} />
             </div>
           </div>
-          <button
-            className="primary"
-            disabled={state.shop.some((s) => s.team === 0)}
-            onClick={startBattle}
-          >
+          <div className="deploy-status">
+            <span>蓝方待放: {team0Pool.length}</span>
+            <span>红方待放: {team1Pool.length}</span>
+          </div>
+          <button className="primary" disabled={!allDeployed} onClick={startBattle}>
             开战！
           </button>
         </section>
       )}
 
-      {(state.phase === 'battle' || state.phase === 'result') && state.battle && (
+      {view === 'game' && (state.phase === 'battle' || state.phase === 'result') && state.battle && (
         <section className="battle">
           <BattleCanvas snapshot={state.battle} />
           {state.phase === 'result' && (
             <div className="result-overlay">
-              <h2>{state.winner === 0 ? '我方胜利！' : '敌方胜利！'}</h2>
+              <h2>{state.winner === 0 ? '蓝方胜利！' : '红方胜利！'}</h2>
               <button className="primary" onClick={reset}>再来一局</button>
             </div>
           )}
@@ -214,11 +306,57 @@ export default function App() {
   )
 }
 
-function DeployPreview({ deployed }: { deployed: DeployedUnit[] }) {
+function TeamSwitcher({ team, onChange }: { team: 0 | 1; onChange: (t: 0 | 1) => void }) {
+  return (
+    <div className="team-switcher">
+      <button
+        type="button"
+        className={`team-tab team0${team === 0 ? ' active' : ''}`}
+        onClick={() => onChange(0)}
+      >
+        蓝方
+      </button>
+      <button
+        type="button"
+        className={`team-tab team1${team === 1 ? ' active' : ''}`}
+        onClick={() => onChange(1)}
+      >
+        红方
+      </button>
+    </div>
+  )
+}
+
+function DeployPreview({
+  deployed,
+  activeTeam,
+}: {
+  deployed: DeployedUnit[]
+  activeTeam: 0 | 1
+}) {
   return (
     <svg viewBox={`0 0 ${FIELD_W} ${FIELD_H}`} className="deploy-preview">
-      <rect width={FIELD_W} height={FIELD_H} fill="#3d5c2e" />
+      <rect width={FIELD_W / 2} height={FIELD_H} fill="#2e4a38" />
+      <rect x={FIELD_W / 2} width={FIELD_W / 2} height={FIELD_H} fill="#4a382e" />
       <line x1={FIELD_W / 2} y1={0} x2={FIELD_W / 2} y2={FIELD_H} stroke="rgba(255,255,255,0.35)" strokeDasharray="8 8" />
+      <rect
+        x={0}
+        y={0}
+        width={FIELD_W / 2 - 30}
+        height={FIELD_H}
+        fill={activeTeam === 0 ? 'rgba(74,158,255,0.12)' : 'transparent'}
+        stroke={activeTeam === 0 ? 'rgba(74,158,255,0.45)' : 'transparent'}
+        strokeDasharray="6 4"
+      />
+      <rect
+        x={FIELD_W / 2 + 30}
+        y={0}
+        width={FIELD_W / 2 - 30}
+        height={FIELD_H}
+        fill={activeTeam === 1 ? 'rgba(255,107,74,0.12)' : 'transparent'}
+        stroke={activeTeam === 1 ? 'rgba(255,107,74,0.45)' : 'transparent'}
+        strokeDasharray="6 4"
+      />
       {deployed.map((d) => (
         <g key={d.id}>
           <circle cx={d.x} cy={d.y} r={16} fill={d.team === 0 ? '#4a9eff' : '#ff6b4a'} />

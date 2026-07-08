@@ -52,16 +52,41 @@ body {
   border: 1px solid #334;
   border-radius: 8px;
   color: #eee;
+  font-size: 12px;
+}
+
+.monster-card.disabled {
+  opacity: 0.4;
+}
+
+.monster-card:hover:not(.disabled) {
+  border-color: #4a9eff;
+}
+
+.buy-actions {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.buy-actions button {
+  flex: 1;
+  padding: 4px 0;
+  background: #0f3460;
+  border: 1px solid #4a9eff;
+  border-radius: 6px;
+  color: #eee;
   cursor: pointer;
   font-size: 12px;
 }
 
-.monster-card:hover:not(:disabled) {
-  border-color: #4a9eff;
+.buy-actions button:hover:not(:disabled) {
+  background: #1a4a7a;
 }
 
-.monster-card:disabled {
-  opacity: 0.4;
+.buy-actions button:disabled {
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
@@ -85,6 +110,91 @@ body {
 .primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.picked-list.dual {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.picked-list.dual h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+
+.pick-tag.team0 {
+  border: 1px solid rgba(74, 158, 255, 0.5);
+}
+
+.pick-tag.team1 {
+  border: 1px solid rgba(255, 107, 74, 0.5);
+}
+
+.empty-pick {
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.team-switcher {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.team-tab {
+  padding: 8px 20px;
+  background: #16213e;
+  border: 2px solid #334;
+  border-radius: 8px;
+  color: #eee;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.team-tab.team0.active {
+  border-color: #4a9eff;
+  background: #1a3a5c;
+}
+
+.team-tab.team1.active {
+  border-color: #ff6b4a;
+  background: #3c2a28;
+}
+
+.team-gold.team0 {
+  color: #8ec5ff;
+}
+
+.team-gold.team1 {
+  color: #ffb09a;
+}
+
+.deploy-hint .team0 {
+  color: #8ec5ff;
+}
+
+.deploy-hint .team1 {
+  color: #ffb09a;
+}
+
+.deploy-pool.enemy-pool button.selected {
+  border-color: #ff6b4a;
+  background: #3c2a28;
+}
+
+.deploy-status {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+.phase-hint {
+  margin-top: 8px;
+  color: #888;
+  font-size: 0.85rem;
 }
 
 .picked-list {
@@ -160,4 +270,185 @@ body {
 .result-overlay h2 {
   font-size: 2rem;
   margin-bottom: 16px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.view-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.view-tabs button {
+  padding: 6px 14px;
+  background: #16213e;
+  border: 1px solid #334;
+  border-radius: 6px;
+  color: #eee;
+  cursor: pointer;
+}
+
+.view-tabs button.active {
+  border-color: #4a9eff;
+  background: #1a3a5c;
+}
+
+.config-panel {
+  margin-bottom: 24px;
+}
+
+.config-header h2 {
+  margin: 0 0 6px;
+}
+
+.config-header p {
+  margin: 0 0 16px;
+  color: #aaa;
+  font-size: 0.9rem;
+}
+
+.config-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 16px;
+}
+
+.config-monster-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.config-monster-list h3 {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+}
+
+.config-monster-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #16213e;
+  border: 1px solid #334;
+  border-radius: 8px;
+  color: #eee;
+  cursor: pointer;
+  text-align: left;
+}
+
+.config-monster-list button.selected {
+  border-color: #4a9eff;
+  background: #1a3a5c;
+}
+
+.config-monster-list button img {
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+
+.config-note {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: #888;
+  line-height: 1.4;
+}
+
+.config-editor {
+  background: #16213e;
+  border: 1px solid #334;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.config-editor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #2a3a55;
+}
+
+.config-editor-head h3 {
+  margin: 0 0 4px;
+}
+
+.config-editor-head small {
+  color: #aaa;
+}
+
+.config-reset {
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid #665;
+  border-radius: 6px;
+  color: #ddd;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.config-reset:hover {
+  border-color: #ff6b4a;
+  color: #ff6b4a;
+}
+
+.config-group {
+  margin-bottom: 18px;
+}
+
+.config-group h4 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  color: #8ec5ff;
+}
+
+.config-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+
+.config-field-label small {
+  color: #888;
+  margin-left: 4px;
+}
+
+.config-field input {
+  padding: 6px 8px;
+  background: #0f1a30;
+  border: 1px solid #445;
+  border-radius: 6px;
+  color: #eee;
+  font-size: 0.9rem;
+}
+
+.config-field input:focus {
+  outline: none;
+  border-color: #4a9eff;
+}
+
+.config-hint {
+  color: #777;
+  font-size: 0.75rem;
+}
+
+@media (min-width: 1200px) {
+  .app {
+    max-width: 1280px;
+  }
 }
