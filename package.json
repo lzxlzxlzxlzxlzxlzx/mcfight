@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/kill-port.mjs 5174 && vite",
     "build": "tsc && vite build",
-    "preview": "vite preview",
+    "preview": "node scripts/kill-port.mjs 5174 && vite preview",
     "fetch-assets": "node scripts/fetch-assets.mjs"
   },
   "dependencies": {

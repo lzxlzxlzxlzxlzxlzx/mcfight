@@ -1,4 +1,4 @@
-import { BATTLE_FIELD, getUnitVisualHalfExtent } from './field'
+import { BATTLE_FIELD, getUnitFieldHalfExtent } from './field'
 import type { BattleUnit } from './types'
 
 export function initUnitDrift(unit: BattleUnit) {
@@ -19,7 +19,7 @@ export function tickUnitDrift(
   }
   unit.driftTimer -= dt
 
-  const half = getUnitVisualHalfExtent(tags)
+  const half = getUnitFieldHalfExtent(unit, tags)
   const driftSpeed = unit.moveSpeed * speedMultiplier
   let nx = unit.x + Math.cos(unit.driftAngle) * driftSpeed * dt
   let ny = unit.y + Math.sin(unit.driftAngle) * driftSpeed * dt

@@ -1,4 +1,4 @@
-import type { ActiveBeam, BattleUnit, ShockwaveEffect } from '../../game/types'
+import type { ActiveBeam, BattleUnit, ConeStrikeEffect, ShockwaveEffect } from '../../game/types'
 import { MONSTER_MAP } from '../monsterMap'
 import { dealDamageToUnit } from '../../game/unitDamage'
 import { applyStatusEffects } from '../../game/statusEffects'
@@ -53,6 +53,34 @@ export function spawnShockwave(
   })
 }
 
+/** 瞬发扇形挥砍范围（与伤害判定扇形一致，短暂淡出） */
+export function spawnInstantConeVisual(
+  cones: ConeStrikeEffect[],
+  team: 0 | 1,
+  x: number,
+  y: number,
+  aimAngle: number,
+  maxLength: number,
+  angleDeg: number,
+  duration = 0.65,
+) {
+  cones.push({
+    id: eid(),
+    team,
+    x,
+    y,
+    aimAngle,
+    maxLength,
+    angleDeg,
+    waveWidth: maxLength,
+    startReach: maxLength,
+    reach: maxLength,
+    remaining: duration,
+    duration,
+    kind: 'instant',
+  })
+}
+
 export function updateShockwaves(shockwaves: ShockwaveEffect[], dt: number) {
   for (let i = shockwaves.length - 1; i >= 0; i--) {
     shockwaves[i].remaining -= dt
@@ -91,7 +119,7 @@ export function updateActiveBeams(
           beam.length,
         )
         if (d <= beam.halfWidth + u.radius) {
-          u.hp -= dealDamageToUnit(u, beam.damagePerTick, 'ranged')
+          u.hp -= dealDamageToUnit(u, beam.damagePerTick, 'beam')
           if (u.hp <= 0) u.state = 'dead'
         }
       }

@@ -7,7 +7,7 @@ import type {
 } from '../../game/types'
 import { MONSTER_MAP } from '../monsterMap'
 import { dealDamageToUnit } from '../../game/unitDamage'
-import { clampUnitToField } from '../../game/field'
+import { clampUnitToField, clampDestinationPoint } from '../../game/field'
 import { getHarbingerConfig } from './config'
 import { applyStatusEffect } from '../../game/statusEffects'
 import { eid, spawnShockwave } from '../_shared/combatEffects'
@@ -243,8 +243,10 @@ function startCharge(unit: BattleUnit, target: BattleUnit) {
   const c = cfg()
   unit.harbChargeFromX = unit.x
   unit.harbChargeFromY = unit.y
-  unit.harbChargeToX = target.x
-  unit.harbChargeToY = target.y
+  const tags = MONSTER_MAP[unit.monsterId]?.tags ?? []
+  const dest = clampDestinationPoint(target.x, target.y, unit.radius, tags)
+  unit.harbChargeToX = dest.x
+  unit.harbChargeToY = dest.y
   unit.harbChargeTimeLeft = c.chargeDuration
   unit.harbChargeHits = {}
   unit.state = 'attack'

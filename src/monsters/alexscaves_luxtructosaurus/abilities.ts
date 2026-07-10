@@ -1,5 +1,6 @@
 import type { BattleUnit, LavaPatch, MeteorEffect, ShockwaveEffect } from '../../game/types'
 import { MONSTER_MAP } from '../monsterMap'
+import { clampLeapDestination, clampUnitToField, setLeapArcPosition } from '../../game/field'
 import { getDamageAfterArmor } from '../../game/damage'
 import { getLuxConfig } from './config'
 import { applyStatusEffect, applyStatusEffects } from '../../game/statusEffects'
@@ -76,10 +77,12 @@ function spawnFireRing(shockwaves: ShockwaveEffect[], team: 0 | 1, x: number, y:
 
 export function startLeap(unit: BattleUnit, target: BattleUnit) {
   const cfg = lux()
+  const tags = MONSTER_MAP[unit.monsterId]?.tags ?? []
   unit.leapFromX = unit.x
   unit.leapFromY = unit.y
   unit.leapToX = target.x
   unit.leapToY = target.y
+  clampLeapDestination(unit, tags)
   unit.leapTimeLeft = cfg.leapDuration
   unit.leapCooldown = cfg.leapCooldown
   unit.state = 'attack'
@@ -96,17 +99,18 @@ export function tickLeap(
   const cfg = lux()
   if (unit.leapTimeLeft <= 0) return false
 
+  const tags = MONSTER_MAP[unit.monsterId]?.tags ?? []
   const total = cfg.leapDuration
   const elapsed = total - unit.leapTimeLeft
   unit.leapTimeLeft -= dt
   const t = Math.min(1, (elapsed + dt) / total)
-  const ease = t * (2 - t)
-  unit.x = unit.leapFromX + (unit.leapToX - unit.leapFromX) * ease
-  unit.y = unit.leapFromY + (unit.leapToY - unit.leapFromY) * ease - Math.sin(t * Math.PI) * 55
+  setLeapArcPosition(unit, tags, t, 55)
+  unit.state = 'attack'
 
   if (unit.leapTimeLeft <= 0) {
     unit.x = unit.leapToX
     unit.y = unit.leapToY
+    clampUnitToField(unit, tags)
     groundAoeDamage(unit, unit.x, unit.y, cfg.leapRadius, cfg.leapDamage, units, true)
     spawnFireRing(shockwaves, unit.team, unit.x, unit.y, cfg.leapRadius)
     unit.leapTimeLeft = 0

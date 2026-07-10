@@ -1,10 +1,11 @@
 import type { BattleUnit, ConeStrikeEffect, ShockwaveEffect } from '../../game/types'
 import { MONSTER_MAP } from '../monsterMap'
-import { clampUnitToField } from '../../game/field'
+import { clampUnitToField, clampDestinationPoint } from '../../game/field'
 import { dealDamageToUnit } from '../../game/unitDamage'
 import { getKobolediatorConfig } from './config'
+import { isWithinCastRange, isSkillAllowedForTarget } from '../../game/unitCombat'
 import { isUnitInStompSector } from '../cataclysm_ancient_remnant/abilities'
-import { eid, spawnShockwave } from '../_shared/combatEffects'
+import { spawnInstantConeVisual, spawnShockwave } from '../_shared/combatEffects'
 
 export const KOBO_ID = 'cataclysm_kobolediator'
 
@@ -81,32 +82,84 @@ function spawnConeVisual(
   aimAngle: number,
   length: number,
   angleDeg: number,
-  waveWidth: number,
-  duration: number,
 ) {
-  cones.push({
-    id: eid(),
-    team: unit.team,
-    x: unit.x,
-    y: unit.y,
-    aimAngle,
-    maxLength: length,
-    angleDeg,
-    waveWidth,
-    startReach: waveWidth * 0.5,
-    reach: waveWidth * 0.5,
-    remaining: duration,
-    duration,
-  })
+  spawnInstantConeVisual(cones, unit.team, unit.x, unit.y, aimAngle, length, angleDeg)
 }
 
-export function pickKobolediatorSkill(
+const SEPARATION_FORCE = 120
+
+function separateAllies(unit: BattleUnit, allies: BattleUnit[], dt: number) {
+  let sx = 0
+  let sy = 0
+  for (const ally of allies) {
+    if (ally.id === unit.id || ally.state === 'dead') continue
+    const d = Math.hypot(unit.x - ally.x, unit.y - ally.y)
+    const minDist = unit.radius + ally.radius
+    if (d > 0 && d < minDist) {
+      const push = (minDist - d) / minDist
+      sx += ((unit.x - ally.x) / d) * push
+      sy += ((unit.y - ally.y) / d) * push
+    }
+  }
+  unit.x += sx * SEPARATION_FORCE * dt
+  unit.y += sy * SEPARATION_FORCE * dt
+}
+
+/** 三连击期间追击目标并实时更新朝向与挥砍角度 */
+function tickKoboTripleTracking(
   unit: BattleUnit,
   target: BattleUnit,
-  dist: number,
-): KoboSkillId | null {
+  allies: BattleUnit[],
+  dt: number,
+) {
+  unit.facing = target.x >= unit.x ? 1 : -1
+  unit.koboCastAimAngle = Math.atan2(target.y - unit.y, target.x - unit.x)
+
+  const dx = target.x - unit.x
+  const dy = target.y - unit.y
+  const len = Math.hypot(dx, dy) || 1
+  unit.x += (dx / len) * unit.moveSpeed * dt
+  unit.y += (dy / len) * unit.moveSpeed * dt
+  separateAllies(unit, allies, dt)
+  clampUnitToField(unit, MONSTER_MAP[unit.monsterId]?.tags ?? [])
+  unit.state = 'attack'
+}
+
+export function koboSkillCastRange(skill: KoboSkillId): number {
   const c = cfg()
-  if (dist > c.engageRange + target.radius * 0.35) return null
+  switch (skill) {
+    case 'charge':
+      return c.engageRange
+    case 'triple':
+      return c.tripleConeLength
+    case 'stomp':
+      return c.stompConeLength
+  }
+}
+
+export function isKoboSkillAllowed(_skill: KoboSkillId, target: BattleUnit): boolean {
+  return isSkillAllowedForTarget(true, target)
+}
+
+export function isKoboSkillInRange(
+  skill: KoboSkillId,
+  target: BattleUnit,
+  dist: number,
+): boolean {
+  if (!isKoboSkillAllowed(skill, target)) return false
+  const c = cfg()
+  if (skill === 'charge') {
+    return (
+      dist >= c.chargeMinDist
+      && isWithinCastRange(dist, c.engageRange, target)
+    )
+  }
+  return isWithinCastRange(dist, koboSkillCastRange(skill), target)
+}
+
+export function pickKobolediatorSkill(unit: BattleUnit, dist: number, target: BattleUnit): KoboSkillId | null {
+  const c = cfg()
+  if (target.moveType === 'fly') return null
   if (dist >= c.chargeMinDist) return 'charge'
   return unit.koboCycleSkill
 }
@@ -120,8 +173,10 @@ export function startKoboCharge(
   unit.koboPendingSkill = 'charge'
   unit.koboChargeFromX = unit.x
   unit.koboChargeFromY = unit.y
-  unit.koboChargeToX = target.x
-  unit.koboChargeToY = target.y
+  const tags = MONSTER_MAP[unit.monsterId]?.tags ?? []
+  const dest = clampDestinationPoint(target.x, target.y, unit.radius, tags)
+  unit.koboChargeToX = dest.x
+  unit.koboChargeToY = dest.y
   unit.koboChargeTimeLeft = c.chargeDuration
   unit.facing = target.x >= unit.x ? 1 : -1
   unit.attackAnimTimer = c.chargeDuration
@@ -169,11 +224,11 @@ function executeTripleStrike(
   if (strikeIndex === 0) {
     const aim = base - offset
     applyConeDamage(unit, units, aim, c.tripleSlashDamage, c.tripleConeLength, c.tripleConeAngleDeg)
-    spawnConeVisual(coneStrikes, unit, aim, c.tripleConeLength, c.tripleConeAngleDeg, 72, 0.4)
+    spawnConeVisual(coneStrikes, unit, aim, c.tripleConeLength, c.tripleConeAngleDeg)
   } else if (strikeIndex === 1) {
     const aim = base + offset
     applyConeDamage(unit, units, aim, c.tripleSlashDamage, c.tripleConeLength, c.tripleConeAngleDeg)
-    spawnConeVisual(coneStrikes, unit, aim, c.tripleConeLength, c.tripleConeAngleDeg, 72, 0.4)
+    spawnConeVisual(coneStrikes, unit, aim, c.tripleConeLength, c.tripleConeAngleDeg)
   } else {
     applyCircleDamage(unit, units, unit.x, unit.y, c.tripleFinaleRadius, c.tripleFinaleDamage)
     spawnShockwave(shockwaves, unit.team, unit.x, unit.y, c.tripleFinaleRadius * 0.9, 0.38)
@@ -184,7 +239,6 @@ function executeStomp(
   unit: BattleUnit,
   units: BattleUnit[],
   coneStrikes: ConeStrikeEffect[],
-  shockwaves: ShockwaveEffect[],
 ) {
   const c = cfg()
   applyConeDamage(
@@ -201,12 +255,7 @@ function executeStomp(
     unit.koboCastAimAngle,
     c.stompConeLength,
     c.stompConeAngleDeg,
-    c.stompWaveWidth,
-    c.stompCastDuration * 0.55,
   )
-  spawnShockwave(shockwaves, unit.team, unit.x, unit.y, c.stompConeLength * 0.4, 0.35)
-  const sw = shockwaves[shockwaves.length - 1]
-  if (sw) sw.kind = 'sand'
 }
 
 export function startKoboCast(
@@ -231,7 +280,7 @@ export function startKoboCast(
     executeTripleStrike(unit, units, 0, coneStrikes, shockwaves)
     unit.koboTripleStrikesDone = 1
   } else {
-    executeStomp(unit, units, coneStrikes, shockwaves)
+    executeStomp(unit, units, coneStrikes)
   }
 }
 
@@ -241,6 +290,8 @@ export function tickKoboCast(
   units: BattleUnit[],
   coneStrikes: ConeStrikeEffect[],
   shockwaves: ShockwaveEffect[],
+  target: BattleUnit | null = null,
+  allies: BattleUnit[] = [],
 ): boolean {
   if (unit.koboCastTimeLeft <= 0) return false
 
@@ -248,6 +299,10 @@ export function tickKoboCast(
   const isTriple = unit.koboPendingSkill === 'triple'
   const total = isTriple ? c.tripleCastDuration : c.stompCastDuration
   const elapsed = total - unit.koboCastTimeLeft
+
+  if (isTriple && target && target.state !== 'dead') {
+    tickKoboTripleTracking(unit, target, allies, dt)
+  }
 
   if (isTriple) {
     const secondAt = total * 0.5

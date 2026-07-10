@@ -1,11 +1,13 @@
 import type { BattleUnit, StatusEffectType } from './types'
 import { MONSTER_MAP } from '../data/monsters'
+import { isAmethystCrabBurrowed } from '../monsters/cataclysm_amethyst_crab/abilities'
 
 export const STATUS_CONFIG = {
   poison: { dps: 2, duration: 5 },
   burn: { dps: 1, duration: 10 },
   wither: { dps: 3, duration: 4 },
   slow: { duration: 5, speedMult: 0.7 },
+  fear: { duration: 2 },
 } as const
 
 export const FLY_MELEE_VULN_WINDOW = 0.55
@@ -26,7 +28,12 @@ export function applyStatusEffects(unit: BattleUnit, types: StatusEffectType[]) 
   for (const type of types) applyStatusEffect(unit, type)
 }
 
+export function isFeared(unit: BattleUnit): boolean {
+  return unit.statusEffects.some((e) => e.type === 'fear')
+}
+
 function dealTrueDamage(unit: BattleUnit, amount: number) {
+  if (isAmethystCrabBurrowed(unit)) return
   unit.hp -= amount
   if (unit.hp <= 0) unit.state = 'dead'
 }
@@ -54,6 +61,7 @@ export function tickStatusEffects(unit: BattleUnit, units: BattleUnit[], dt: num
     }
 
     if (effect.type === 'slow') continue
+    if (effect.type === 'fear') continue
     if (effect.type === 'burn' && MONSTER_MAP[unit.monsterId].tags.includes('fire_immune')) continue
 
     const dps = STATUS_CONFIG[effect.type].dps

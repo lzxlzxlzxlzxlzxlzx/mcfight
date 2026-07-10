@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BattleCanvas } from './components/BattleCanvas'
 import { MonsterConfigPanel } from './components/MonsterConfigPanel'
 import { BULK_BUY_COUNT, INITIAL_GOLD, MONSTERS, MONSTER_MAP } from './data/monsters'
+import { buildRandomDeployments, canAutoDeploy } from './game/autoDeploy'
 import { getUnitVisualHalfExtent } from './game/field'
+import { BATTLE_FIELD } from './game/field'
 import { createBattleFromDeployments, createDeployId, stepBattle } from './game/battleEngine'
 import type { DeployedUnit, GameState } from './game/types'
 
-const FIELD_W = 960
-const FIELD_H = 540
+const FIELD_W = BATTLE_FIELD.width
+const FIELD_H = BATTLE_FIELD.height
 
 function createInitialState(): GameState {
   return {
@@ -123,6 +125,23 @@ export default function App() {
   )
 
   const allDeployed = team0Pool.length === 0 && team1Pool.length === 0
+
+  const canAuto = canAutoDeploy(state.shop, state.deployed)
+
+  const autoDeployAndStart = () => {
+    setState((prev) => {
+      if (!canAutoDeploy(prev.shop, prev.deployed)) return prev
+      const deployed = buildRandomDeployments(prev.shop, prev.deployed)
+      return {
+        ...prev,
+        phase: 'battle',
+        shop: [],
+        deployed,
+        battle: createBattleFromDeployments(deployed),
+      }
+    })
+    setSelectedMonsterId(null)
+  }
 
   const startBattle = () => {
     if (!allDeployed) return
@@ -247,9 +266,14 @@ export default function App() {
               ))}
             </div>
           </div>
-          <button className="primary" disabled={!canStartDeploy} onClick={startDeploy}>
-            进入部署
-          </button>
+          <div className="shop-actions">
+            <button className="primary" disabled={!canStartDeploy} onClick={startDeploy}>
+              进入部署
+            </button>
+            <button className="secondary" disabled={!canAuto} onClick={autoDeployAndStart}>
+              自动部署并开战
+            </button>
+          </div>
           {!canStartDeploy && (
             <p className="phase-hint">蓝方与红方各至少选购 1 只怪物后可部署</p>
           )}
@@ -285,9 +309,14 @@ export default function App() {
             <span>蓝方待放: {team0Pool.length}</span>
             <span>红方待放: {team1Pool.length}</span>
           </div>
-          <button className="primary" disabled={!allDeployed} onClick={startBattle}>
-            开战！
-          </button>
+          <div className="deploy-actions">
+            <button className="secondary" disabled={!canAuto} onClick={autoDeployAndStart}>
+              自动部署并开战
+            </button>
+            <button className="primary" disabled={!allDeployed} onClick={startBattle}>
+              开战！
+            </button>
+          </div>
         </section>
       )}
 

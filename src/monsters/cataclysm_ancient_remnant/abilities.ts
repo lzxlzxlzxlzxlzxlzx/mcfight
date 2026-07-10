@@ -278,6 +278,7 @@ export function spawnStompWaveVisual(cones: ConeStrikeEffect[], unit: BattleUnit
     reach: startReach,
     remaining: duration,
     duration,
+    kind: 'wave',
   })
 }
 
@@ -314,7 +315,9 @@ export function tickConeStrikes(cones: ConeStrikeEffect[], dt: number) {
   for (let i = cones.length - 1; i >= 0; i--) {
     const cone = cones[i]
     cone.remaining -= dt
-    cone.reach = stompWaveOuterReach(cone)
+    if (cone.kind !== 'instant') {
+      cone.reach = stompWaveOuterReach(cone)
+    }
     if (cone.remaining <= 0) cones.splice(i, 1)
   }
 }
@@ -428,6 +431,8 @@ function spawnObeliskRing(
   falling: FallingObelisk[],
 ) {
   const { cx, cy, maxRadius, ringCount, fallDuration, impactRadius, spacing } = barrage
+  // 落点弧长间距须大于伤害直径，石碑圈之间才有躲避间隙
+  const stoneSpacing = Math.max(spacing, impactRadius * 2.35)
 
   const pushStone = (x: number, y: number) => {
     falling.push({
@@ -451,7 +456,7 @@ function spawnObeliskRing(
   }
 
   const ringRadius = (maxRadius * ringIndex) / (ringCount - 1)
-  const count = Math.max(4, Math.round((Math.PI * 2 * ringRadius) / spacing))
+  const count = Math.max(4, Math.round((Math.PI * 2 * ringRadius) / stoneSpacing))
   for (let i = 0; i < count; i++) {
     const angle = (Math.PI * 2 * i) / count + ringIndex * 0.18
     pushStone(cx + Math.cos(angle) * ringRadius, cy + Math.sin(angle) * ringRadius)
@@ -470,7 +475,7 @@ function applyObeliskImpact(
   for (const u of units) {
     if (u.state === 'dead' || u.team === barrage.team) continue
     if (barrage.hitEnemyIds.includes(u.id)) continue
-    if (Math.hypot(u.x - stone.x, u.y - stone.y) <= stone.impactRadius + u.radius * 0.4) {
+    if (Math.hypot(u.x - stone.x, u.y - stone.y) <= stone.impactRadius + u.radius * 0.25) {
       applyDamageTo(attacker, u, skillDamage(barrage.baseDamage, barrage.pctMaxHp, u))
       barrage.hitEnemyIds.push(u.id)
     }

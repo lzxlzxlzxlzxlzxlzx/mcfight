@@ -74,8 +74,8 @@ export function remnantDefaults(): RemnantConfig {
     obeliskRingCount: 7,
     obeliskRingInterval: 0.38,
     obeliskFallDuration: 0.5,
-    obeliskImpactRadius: 38,
-    obeliskSpacing: 52,
+    obeliskImpactRadius: 24,
+    obeliskSpacing: 72,
     obeliskCooldown: 20,
   }
 }

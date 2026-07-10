@@ -21,7 +21,6 @@ export interface KobolediatorConfig {
   stompDamage: number
   stompConeLength: number
   stompConeAngleDeg: number
-  stompWaveWidth: number
   rangedBlockPct: number
 }
 
@@ -40,15 +39,14 @@ export function kobolediatorDefaults(): KobolediatorConfig {
     tripleCastDuration: 3,
     tripleSlashDamage: 14,
     tripleFinaleDamage: 18,
-    tripleConeLength: 13 * R,
-    tripleConeAngleDeg: 70,
+    tripleConeLength: 9 * R,
+    tripleConeAngleDeg: 55,
     tripleConeOffsetDeg: 32,
     tripleFinaleRadius: 9 * R,
     stompCastDuration: 3,
     stompDamage: 14,
-    stompConeLength: 20 * R,
-    stompConeAngleDeg: 30,
-    stompWaveWidth: 100,
+    stompConeLength: 28 * R,
+    stompConeAngleDeg: 38,
     rangedBlockPct: 50,
   }
 }

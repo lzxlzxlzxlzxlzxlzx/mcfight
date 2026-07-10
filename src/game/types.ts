@@ -1,6 +1,6 @@
 export type MoveType = 'ground' | 'fly'
 export type AttackType = 'melee' | 'ranged'
-export type StatusEffectType = 'poison' | 'burn' | 'wither' | 'slow'
+export type StatusEffectType = 'poison' | 'burn' | 'wither' | 'slow' | 'fear'
 
 export interface StatusEffect {
   type: StatusEffectType
@@ -99,6 +99,8 @@ export interface BattleUnit {
   /** 攻击间隔内随机飘移方向与换向计时 */
   driftAngle: number
   driftTimer: number
+  /** 强制重选最近目标的倒计时 */
+  retargetTimer: number
   /** 瓦吉特：技能施法 */
   wadjetCastTimeLeft: number
   wadjetPendingSkill: 'sweep' | 'tornado' | 'obelisk' | null
@@ -117,6 +119,32 @@ export interface BattleUnit {
   koboChargeToY: number
   koboTripleStrikesDone: number
   koboCastAimAngle: number
+  /** 末影傀儡：技能释放定身剩余时间 */
+  enderCastTimeLeft: number
+  /** 撼地龙：恐吓怒吼 */
+  tremorRoarCooldown: number
+  tremorRoarTimeLeft: number
+  /** 诡异蚊鬼：阶段 ground | frenzy */
+  moscoPhase: 'ground' | 'frenzy'
+  /** 吸血技能定身 */
+  moscoCastTimeLeft: number
+  /** 紫水晶巨蟹：埋地无敌 */
+  crabBurrowTimeLeft: number
+  crabCastTimeLeft: number
+  crabPendingSkill: 'emerge' | 'sweep' | null
+  /** 炽燃遗魂 */
+  revenantCastTimeLeft: number
+  revenantPendingSkill: 'spin' | 'breath' | 'bones' | null
+  revenantTicksDone: number
+  revenantAimAngle: number
+  revenantAttackCooldown: number
+  /** 遗弃者 */
+  forsakenRegenAccum: number
+  forsakenCastTimeLeft: number
+  forsakenPendingSkill: 'bite' | 'hammer' | 'sonic' | 'ranged_sonic' | null
+  forsakenTicksDone: number
+  forsakenAimAngle: number
+  forsakenLeapCooldown: number
 }
 
 export interface MeteorEffect {
@@ -228,6 +256,22 @@ export interface ConeStrikeEffect {
   reach: number
   remaining: number
   duration: number
+  /** wave=海浪扩散动画，instant=瞬发扇形范围 */
+  kind?: 'wave' | 'instant'
+}
+
+export interface VoidRuneEffect {
+  id: string
+  team: 0 | 1
+  originX: number
+  originY: number
+  dirX: number
+  dirY: number
+  barLength: number
+  barHalfWidth: number
+  circleRadius: number
+  remaining: number
+  duration: number
 }
 
 export interface ActiveBeam {
@@ -252,7 +296,7 @@ export interface ActiveBeam {
   statusOnTick?: StatusEffectType[]
 }
 
-export type ProjectileKind = 'default' | 'harb_wither' | 'harb_homing' | 'harb_laser'
+export type ProjectileKind = 'default' | 'harb_wither' | 'harb_homing' | 'harb_laser' | 'revenant_bone' | 'forsaken_sonic'
 
 export interface Projectile {
   id: string
@@ -267,9 +311,35 @@ export interface Projectile {
   kind?: ProjectileKind
   explodeRadius?: number
   statusOnHit?: StatusEffectType[]
-  /** 追踪导弹初始/当前飞行方向 */
+  /** 直线飞行方向（不追踪时可挡枪/躲避） */
   dirX?: number
   dirY?: number
+  maxTravel?: number
+  traveled?: number
+  /** 穿透弹道已命中单位 */
+  hitEnemyIds?: string[]
+  pierceHalfWidth?: number
+  /** 弧形声波：外弧半径与张角（弧度） */
+  arcRadius?: number
+  arcHalfRad?: number
+}
+
+export interface ForsakenArcWave {
+  id: string
+  team: 0 | 1
+  sourceId: string
+  sourceMonsterId: string
+  /** 弧波前沿中心 */
+  x: number
+  y: number
+  dirX: number
+  dirY: number
+  speed: number
+  arcRadius: number
+  arcHalfRad: number
+  arcBandWidth: number
+  damage: number
+  hitEnemyIds: string[]
 }
 
 export interface BattleSnapshot {
@@ -284,6 +354,8 @@ export interface BattleSnapshot {
   fallingObelisks: FallingObelisk[]
   coneStrikes: ConeStrikeEffect[]
   linearSandTornados: LinearSandTornado[]
+  forsakenArcWaves: ForsakenArcWave[]
+  voidRunes: VoidRuneEffect[]
   tick: number
   winner: 0 | 1 | null
 }

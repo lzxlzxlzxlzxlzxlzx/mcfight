@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react'
-import type { ActiveBeam, BattleSnapshot, ConeStrikeEffect, FallingObelisk, LavaPatch, LinearSandTornado, MeteorEffect, SandTornado, ShockwaveEffect, StatusEffectType } from '../game/types'
+import type { ActiveBeam, BattleSnapshot, ConeStrikeEffect, FallingObelisk, ForsakenArcWave, LavaPatch, LinearSandTornado, MeteorEffect, SandTornado, ShockwaveEffect, StatusEffectType, VoidRuneEffect } from '../game/types'
 import { BATTLE_FIELD } from '../game/battleEngine'
 import { getUnitDisplaySize } from '../game/field'
 import { getTremorBeam } from '../game/abilities/tremorzilla'
 import { getStompWaveBandGeom, getTornadoPosition } from '../game/abilities/ancientRemnant'
+import { getForsakenArcWaveGeom } from '../monsters/alexscaves_forsaken/abilities'
 import { getMonsterSpriteUrl, MONSTER_MAP } from '../data/monsters'
+import { isRevenantDefending } from '../monsters/cataclysm_ignited_revenant/abilities'
 
 interface Props {
   snapshot: BattleSnapshot
@@ -58,9 +60,69 @@ function projectileColor(p: BattleSnapshot['projectiles'][number]) {
       return palette.wither
     case 'harb_homing':
       return palette.homing
+    case 'revenant_bone':
+      return p.team === 0 ? '#ff8c42' : '#ff5a2e'
     default:
       return palette.default
   }
+}
+
+function drawForsakenSonicArc(
+  ctx: CanvasRenderingContext2D,
+  wave: ForsakenArcWave,
+  scale: number,
+  tick: number,
+) {
+  const geom = getForsakenArcWaveGeom(wave)
+  const outer = geom.outerReach * scale
+  const inner = geom.innerReach * scale
+  if (outer <= 1) return
+
+  const { start, end } = geom
+  const cx = geom.cx * scale
+  const cy = geom.cy * scale
+  const crest = 0.9 + 0.1 * Math.sin(tick * 0.5 + wave.x * 0.02)
+  const fill = wave.team === 0 ? 'rgba(120, 235, 255, 0.42)' : 'rgba(90, 220, 255, 0.38)'
+  const shock = wave.team === 0 ? '#b8fcff' : '#7ee8ff'
+  const ring = wave.team === 0 ? '#5ad8ff' : '#3ec8f5'
+
+  const drawBand = (outR: number, inR: number, a: number) => {
+    ctx.globalAlpha = a
+    ctx.fillStyle = fill
+    ctx.beginPath()
+    ctx.arc(0, 0, outR, start, end)
+    if (outR > inR + 0.5) ctx.arc(0, 0, inR, end, start, true)
+    else ctx.lineTo(0, 0)
+    ctx.closePath()
+    ctx.fill()
+
+    ctx.globalAlpha = a * crest
+    ctx.strokeStyle = shock
+    ctx.lineWidth = 6 * scale
+    ctx.lineCap = 'round'
+    ctx.shadowColor = '#8ef8ff'
+    ctx.shadowBlur = 14 * scale
+    ctx.beginPath()
+    ctx.arc(0, 0, outR, start, end)
+    ctx.stroke()
+    ctx.shadowBlur = 0
+
+    if (outR > inR + 0.5) {
+      ctx.globalAlpha = a * 0.55
+      ctx.strokeStyle = ring
+      ctx.lineWidth = 2.5 * scale
+      ctx.setLineDash([6 * scale, 5 * scale])
+      ctx.beginPath()
+      ctx.arc(0, 0, inR, end, start, true)
+      ctx.stroke()
+      ctx.setLineDash([])
+    }
+  }
+
+  ctx.save()
+  ctx.translate(cx, cy)
+  drawBand(outer, Math.max(0, inner), 0.95)
+  ctx.restore()
 }
 
 const imageCache = new Map<string, HTMLImageElement>()
@@ -255,7 +317,79 @@ function drawArcWaveBand(
   ctx.restore()
 }
 
+function instantConeFadeAlpha(cone: ConeStrikeEffect): number {
+  if (cone.duration <= 0) return 0
+  const t = 1 - cone.remaining / cone.duration
+  const fadeInEnd = 0.2
+  const fadeOutStart = 0.58
+  if (t < fadeInEnd) return t / fadeInEnd
+  if (t > fadeOutStart) return Math.max(0, (1 - t) / (1 - fadeOutStart))
+  return 1
+}
+
+function drawInstantConeStrike(ctx: CanvasRenderingContext2D, cone: ConeStrikeEffect, scale: number) {
+  const cx = cone.x * scale
+  const cy = cone.y * scale
+  const length = cone.maxLength * scale
+  if (length <= 1) return
+
+  const halfRad = (cone.angleDeg * Math.PI) / 360
+  const alpha = instantConeFadeAlpha(cone)
+  if (alpha <= 0.01) return
+
+  const colors = TEAM_RANGE[cone.team]
+  const start = -halfRad
+  const end = halfRad
+
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.rotate(cone.aimAngle)
+
+  const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, length)
+  grad.addColorStop(0, colors.fill.replace('0.14', '0.06'))
+  grad.addColorStop(0.45, colors.fill.replace('0.14', '0.22'))
+  grad.addColorStop(1, colors.fill.replace('0.14', '0.38'))
+
+  ctx.globalAlpha = alpha * 0.85
+  ctx.fillStyle = grad
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.arc(0, 0, length, start, end)
+  ctx.closePath()
+  ctx.fill()
+
+  ctx.globalAlpha = alpha * 0.95
+  ctx.strokeStyle = colors.shock
+  ctx.lineWidth = 3.5 * scale
+  ctx.beginPath()
+  ctx.arc(0, 0, length, start, end)
+  ctx.stroke()
+
+  ctx.globalAlpha = alpha * 0.55
+  ctx.strokeStyle = colors.ring
+  ctx.lineWidth = 2 * scale
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.lineTo(Math.cos(start) * length, Math.sin(start) * length)
+  ctx.moveTo(0, 0)
+  ctx.lineTo(Math.cos(end) * length, Math.sin(end) * length)
+  ctx.stroke()
+
+  ctx.globalAlpha = alpha * 0.75
+  ctx.strokeStyle = '#fff8dc'
+  ctx.lineWidth = 1.5 * scale
+  ctx.beginPath()
+  ctx.arc(0, 0, length * 0.92, start, end)
+  ctx.stroke()
+
+  ctx.restore()
+}
+
 function drawConeStrike(ctx: CanvasRenderingContext2D, cone: ConeStrikeEffect, scale: number, tick: number) {
+  if (cone.kind === 'instant') {
+    drawInstantConeStrike(ctx, cone, scale)
+    return
+  }
   drawArcWaveBand(ctx, getStompWaveBandGeom(cone), scale, 0.92, cone.team, tick)
 }
 
@@ -352,6 +486,48 @@ function drawFallingObelisk(ctx: CanvasRenderingContext2D, stone: FallingObelisk
   ctx.restore()
 }
 
+function drawVoidRune(ctx: CanvasRenderingContext2D, rune: VoidRuneEffect, scale: number) {
+  const alpha = Math.max(0, Math.min(1, rune.remaining / rune.duration))
+  const angle = Math.atan2(rune.dirY, rune.dirX)
+  const teamFill = rune.team === 0 ? 'rgba(120, 80, 200, 0.35)' : 'rgba(160, 60, 180, 0.35)'
+  const teamStroke = rune.team === 0 ? 'rgba(180, 140, 255, 0.9)' : 'rgba(220, 100, 255, 0.9)'
+
+  ctx.save()
+  ctx.globalAlpha = alpha
+
+  const cx = rune.originX * scale
+  const cy = rune.originY * scale
+  ctx.fillStyle = teamFill
+  ctx.strokeStyle = teamStroke
+  ctx.lineWidth = 2 * scale
+  ctx.beginPath()
+  ctx.arc(cx, cy, rune.circleRadius * scale, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
+
+  ctx.translate(cx, cy)
+  ctx.rotate(angle)
+  const barW = rune.barLength * scale
+  const barH = rune.barHalfWidth * 2 * scale
+  ctx.fillStyle = teamFill
+  ctx.strokeStyle = teamStroke
+  ctx.fillRect(0, -barH / 2, barW, barH)
+  ctx.strokeRect(0, -barH / 2, barW, barH)
+
+  ctx.globalAlpha = alpha * 0.55
+  ctx.fillStyle = rune.team === 0 ? 'rgba(200, 160, 255, 0.5)' : 'rgba(255, 120, 220, 0.5)'
+  for (let i = 0; i < 5; i++) {
+    const t = (i + 1) / 6
+    const rx = barW * t
+    const ry = (Math.sin(i * 2.1) * 0.35) * barH
+    ctx.beginPath()
+    ctx.arc(rx, ry, 3 * scale, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  ctx.restore()
+}
+
 function drawBeam(ctx: CanvasRenderingContext2D, beam: ActiveBeam, scale: number, tick: number) {
   const isDeathLaser = beam.kind === 'harbinger_death'
   const angle = Math.atan2(beam.dirY, beam.dirX) - Math.PI / 2
@@ -416,14 +592,104 @@ function drawBeamCastRange(
   ctx.restore()
 }
 
+function drawAmethystBurrowEffect(
+  ctx: CanvasRenderingContext2D,
+  unit: BattleSnapshot['units'][number],
+  scale: number,
+  size: number,
+  tick: number,
+) {
+  const cx = unit.x * scale
+  const cy = unit.y * scale
+  const pulse = 0.55 + Math.sin(tick * 0.18) * 0.25
+  const burrowT = unit.crabBurrowTimeLeft
+  const castT = unit.crabCastTimeLeft
+  const pending = unit.crabPendingSkill
+
+  if (burrowT > 0) {
+    const moundR = size * 0.72
+    ctx.save()
+    ctx.globalAlpha = 0.75
+    ctx.fillStyle = 'rgba(88, 52, 120, 0.45)'
+    ctx.beginPath()
+    ctx.ellipse(cx, cy + size * 0.12, moundR, moundR * 0.42, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.strokeStyle = 'rgba(186, 120, 255, 0.85)'
+    ctx.lineWidth = 2.5 * scale
+    ctx.setLineDash([5 * scale, 4 * scale])
+    for (let i = 0; i < 3; i++) {
+      const ring = moundR * (0.55 + i * 0.22) * pulse
+      ctx.beginPath()
+      ctx.arc(cx, cy + size * 0.08, ring, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+    ctx.setLineDash([])
+
+    for (let i = 0; i < 6; i++) {
+      const a = tick * 0.12 + i * (Math.PI * 2 / 6)
+      const r = moundR * (0.35 + (i % 2) * 0.15)
+      const px = cx + Math.cos(a) * r
+      const py = cy + size * 0.05 + Math.sin(a) * r * 0.35
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(200, 140, 255, 0.9)' : 'rgba(120, 70, 200, 0.8)'
+      ctx.beginPath()
+      ctx.moveTo(px, py - 4 * scale)
+      ctx.lineTo(px + 3 * scale, py)
+      ctx.lineTo(px, py + 4 * scale)
+      ctx.lineTo(px - 3 * scale, py)
+      ctx.closePath()
+      ctx.fill()
+    }
+    ctx.restore()
+    return
+  }
+
+  if (castT > 0 && pending === 'emerge') {
+    const progress = 1 - castT / 2
+    const r = size * (0.5 + progress * 0.9)
+    ctx.save()
+    ctx.globalAlpha = 0.35 + progress * 0.35
+    ctx.strokeStyle = 'rgba(170, 100, 255, 0.9)'
+    ctx.lineWidth = 3 * scale
+    ctx.beginPath()
+    ctx.arc(cx, cy, r * pulse, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.fillStyle = 'rgba(130, 70, 210, 0.18)'
+    ctx.beginPath()
+    ctx.arc(cx, cy, r * 0.65, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+    return
+  }
+
+  if (castT > 0 && pending === 'sweep') {
+    const progress = 1 - castT / 3
+    const arcR = size * 0.85
+    const start = unit.facing >= 0 ? -Math.PI * 0.35 : Math.PI * 0.65
+    const end = start + (Math.PI * 0.7) * progress
+    ctx.save()
+    ctx.globalAlpha = 0.5 + progress * 0.4
+    ctx.strokeStyle = 'rgba(255, 140, 90, 0.9)'
+    ctx.lineWidth = 4 * scale
+    ctx.beginPath()
+    ctx.arc(cx, cy, arcR, start, end)
+    ctx.stroke()
+    ctx.restore()
+  }
+}
+
 function drawUnit(
   ctx: CanvasRenderingContext2D,
   unit: BattleSnapshot['units'][number],
   scale: number,
   channelingBeam: ActiveBeam | undefined,
+  tick: number,
 ) {
   const def = MONSTER_MAP[unit.monsterId]
-  const action = unit.attackAnimTimer > 0 || channelingBeam || unit.leapTimeLeft > 0 || unit.remnantCastTimeLeft > 0 || unit.harbChargeTimeLeft > 0
+  const isBurrowed = unit.crabBurrowTimeLeft > 0
+  const isCrabCasting = unit.crabCastTimeLeft > 0
+  const isRevenantCasting = unit.revenantCastTimeLeft > 0
+  const action = unit.attackAnimTimer > 0 || channelingBeam || unit.leapTimeLeft > 0 || unit.remnantCastTimeLeft > 0 || unit.harbChargeTimeLeft > 0 || isBurrowed || isCrabCasting || isRevenantCasting
     ? 'attack'
     : 'idle'
   const img = loadImage(getMonsterSpriteUrl(unit.monsterId, action))
@@ -436,6 +702,13 @@ function drawUnit(
   ctx.save()
   ctx.translate(unit.x * scale, unit.y * scale)
   if (unit.facing < 0) ctx.scale(-1, 1)
+
+  if (isBurrowed) {
+    ctx.globalAlpha = 0.28
+    const sinkY = size * 0.35
+    ctx.translate(0, sinkY)
+    ctx.scale(1, 0.55)
+  }
 
   if (img.complete && img.naturalWidth > 0) {
     ctx.drawImage(img, -size / 2, -size / 2, size, size)
@@ -452,6 +725,28 @@ function drawUnit(
 
   ctx.restore()
 
+  if (unit.monsterId === 'cataclysm_amethyst_crab' && (isBurrowed || isCrabCasting)) {
+    drawAmethystBurrowEffect(ctx, unit, scale, size, tick)
+  }
+
+  if (unit.monsterId === 'cataclysm_ignited_revenant' && isRevenantDefending(unit)) {
+    const cx = unit.x * scale
+    const cy = unit.y * scale
+    const pulse = 0.7 + Math.sin(tick * 0.14) * 0.15
+    ctx.save()
+    ctx.globalAlpha = 0.45 * pulse
+    ctx.strokeStyle = unit.team === 0 ? 'rgba(120, 200, 255, 0.9)' : 'rgba(255, 180, 120, 0.9)'
+    ctx.lineWidth = 3 * scale
+    ctx.beginPath()
+    ctx.arc(cx, cy, size * 0.58, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.fillStyle = 'rgba(200, 120, 60, 0.12)'
+    ctx.beginPath()
+    ctx.arc(cx, cy, size * 0.5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  }
+
   const barW = 36 * scale
   const barH = 5 * scale
   const hpPct = Math.max(0, unit.hp / unit.maxHp)
@@ -465,6 +760,7 @@ function drawUnit(
     burn: '#e74c3c',
     wither: '#2c2c2c',
     slow: '#85c1e9',
+    fear: '#c39bd3',
   }
   unit.statusEffects.forEach((effect, i) => {
     ctx.fillStyle = effectColors[effect.type]
@@ -489,20 +785,14 @@ export function BattleCanvas({ snapshot }: Props) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const rect = canvas.getBoundingClientRect()
-    const scaleX = rect.width / BATTLE_FIELD.width
-    const scaleY = rect.height / BATTLE_FIELD.height
-    const scale = Math.min(scaleX, scaleY)
+    const scale = 1
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
     ctx.fillStyle = '#3d5c2e'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-    const offsetX = (canvas.width - BATTLE_FIELD.width * scale) / 2
-    const offsetY = (canvas.height - BATTLE_FIELD.height * scale) / 2
     ctx.save()
-    ctx.translate(offsetX, offsetY)
 
     ctx.strokeStyle = 'rgba(255,255,255,0.35)'
     ctx.setLineDash([8, 8])
@@ -536,6 +826,10 @@ export function BattleCanvas({ snapshot }: Props) {
       drawConeStrike(ctx, cone, scale, snapshot.tick)
     }
 
+    for (const rune of snapshot.voidRunes) {
+      drawVoidRune(ctx, rune, scale)
+    }
+
     for (const m of snapshot.meteors) {
       drawMeteor(ctx, m, scale)
     }
@@ -545,10 +839,10 @@ export function BattleCanvas({ snapshot }: Props) {
     }
 
     for (const p of snapshot.projectiles) {
-      const isHarb = p.kind && p.kind !== 'default'
-      const s = (isHarb ? 12 : 10) * scale
       const px = p.x * scale
       const py = p.y * scale
+      const isHarb = p.kind && p.kind !== 'default'
+      const s = (isHarb ? 12 : 10) * scale
       ctx.fillStyle = projectileColor(p)
       ctx.beginPath()
       ctx.arc(px, py, s / 2, 0, Math.PI * 2)
@@ -569,7 +863,11 @@ export function BattleCanvas({ snapshot }: Props) {
     for (const unit of drawOrder) {
       if (unit.state === 'dead') continue
       const channelingBeam = snapshot.activeBeams.find((b) => b.sourceId === unit.id)
-      drawUnit(ctx, unit, scale, channelingBeam)
+      drawUnit(ctx, unit, scale, channelingBeam, snapshot.tick)
+    }
+
+    for (const wave of snapshot.forsakenArcWaves ?? []) {
+      drawForsakenSonicArc(ctx, wave, scale, snapshot.tick)
     }
 
     ctx.restore()

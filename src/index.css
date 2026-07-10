@@ -112,6 +112,34 @@ body {
   cursor: not-allowed;
 }
 
+.secondary {
+  padding: 10px 24px;
+  background: transparent;
+  color: #c8d6e5;
+  border: 1px solid rgba(200, 214, 229, 0.45);
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.secondary:hover:not(:disabled) {
+  border-color: #4a9eff;
+  color: #fff;
+}
+
+.secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.shop-actions,
+.deploy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
 .picked-list.dual {
   display: grid;
   grid-template-columns: 1fr 1fr;

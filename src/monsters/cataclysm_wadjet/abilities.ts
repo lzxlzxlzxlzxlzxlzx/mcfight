@@ -3,14 +3,14 @@ import type {
   ConeStrikeEffect,
   LinearSandTornado,
   ObeliskBarrage,
-  ShockwaveEffect,
 } from '../../game/types'
 import { MONSTER_MAP } from '../monsterMap'
 import { getDamageAfterArmor } from '../../game/damage'
 import { BATTLE_FIELD } from '../../game/field'
 import { getWadjetConfig } from './config'
+import { isWithinCastRange, isSkillAllowedForTarget } from '../../game/unitCombat'
 import { isUnitInStompSector } from '../cataclysm_ancient_remnant/abilities'
-import { eid, spawnShockwave } from '../_shared/combatEffects'
+import { eid, spawnInstantConeVisual } from '../_shared/combatEffects'
 
 export const WADJET_ID = 'cataclysm_wadjet'
 
@@ -79,21 +79,15 @@ function spawnWadjetObeliskBarrage(barrages: ObeliskBarrage[], unit: BattleUnit)
 
 function spawnSweepVisual(cones: ConeStrikeEffect[], unit: BattleUnit, aimAngle: number) {
   const c = cfg()
-  const duration = c.skillCastDuration * 0.45
-  cones.push({
-    id: eid(),
-    team: unit.team,
-    x: unit.x,
-    y: unit.y,
+  spawnInstantConeVisual(
+    cones,
+    unit.team,
+    unit.x,
+    unit.y,
     aimAngle,
-    maxLength: c.sweepConeLength,
-    angleDeg: c.sweepConeAngleDeg,
-    waveWidth: c.sweepWaveWidth,
-    startReach: c.sweepWaveWidth * 0.55,
-    reach: c.sweepWaveWidth * 0.55,
-    remaining: duration,
-    duration,
-  })
+    c.sweepConeLength,
+    c.sweepConeAngleDeg,
+  )
 }
 
 function spawnLinearTornado(tornados: LinearSandTornado[], unit: BattleUnit, aimAngle: number) {
@@ -120,9 +114,7 @@ function executeWadjetSkill(
   coneStrikes: ConeStrikeEffect[],
   linearTornados: LinearSandTornado[],
   obeliskBarrages: ObeliskBarrage[],
-  shockwaves: ShockwaveEffect[],
 ) {
-  const c = cfg()
   const aimAngle = unit.wadjetCastAimAngle
 
   switch (skill) {
@@ -130,27 +122,47 @@ function executeWadjetSkill(
       applySweepDamage(unit, units, aimAngle)
       unit.wadjetSweepStrikesDone = 1
       spawnSweepVisual(coneStrikes, unit, aimAngle)
-      spawnShockwave(shockwaves, unit.team, unit.x, unit.y, c.sweepConeLength * 0.35, 0.3)
-      {
-        const sw = shockwaves[shockwaves.length - 1]
-        if (sw) sw.kind = 'sand'
-      }
       break
     case 'tornado':
       spawnLinearTornado(linearTornados, unit, aimAngle)
       break
     case 'obelisk':
       spawnWadjetObeliskBarrage(obeliskBarrages, unit)
-      unit.wadjetObeliskCooldown = c.obeliskCooldown
+      unit.wadjetObeliskCooldown = cfg().obeliskCooldown
       break
   }
 }
 
-export function pickWadjetSkill(unit: BattleUnit, target: BattleUnit, dist: number): WadjetSkillId | null {
+export function wadjetSkillCastRange(skill: WadjetSkillId): number {
   const c = cfg()
-  if (dist > c.engageRange + target.radius * 0.35) return null
+  switch (skill) {
+    case 'sweep':
+      return c.sweepConeLength
+    case 'tornado':
+      return c.engageRange
+    case 'obelisk':
+      return c.obeliskMaxRadius
+  }
+}
+
+export function isWadjetSkillAllowed(skill: WadjetSkillId, target: BattleUnit): boolean {
+  if (skill === 'obelisk') return true
+  return isSkillAllowedForTarget(true, target)
+}
+
+export function isWadjetSkillInRange(
+  skill: WadjetSkillId,
+  target: BattleUnit,
+  dist: number,
+): boolean {
+  if (!isWadjetSkillAllowed(skill, target)) return false
+  return isWithinCastRange(dist, wadjetSkillCastRange(skill), target)
+}
+
+export function pickWadjetSkill(unit: BattleUnit, target: BattleUnit): WadjetSkillId | null {
   if (unit.wadjetObeliskCooldown <= 0) return 'obelisk'
-  return unit.wadjetCycleSkill
+  if (target.moveType === 'ground') return unit.wadjetCycleSkill
+  return null
 }
 
 export function startWadjetCast(
@@ -161,7 +173,6 @@ export function startWadjetCast(
   coneStrikes: ConeStrikeEffect[],
   linearTornados: LinearSandTornado[],
   obeliskBarrages: ObeliskBarrage[],
-  shockwaves: ShockwaveEffect[],
 ) {
   const c = cfg()
   unit.wadjetPendingSkill = skill
@@ -179,7 +190,6 @@ export function startWadjetCast(
     coneStrikes,
     linearTornados,
     obeliskBarrages,
-    shockwaves,
   )
 }
 
@@ -188,7 +198,6 @@ export function tickWadjetCast(
   dt: number,
   units: BattleUnit[],
   coneStrikes: ConeStrikeEffect[],
-  shockwaves: ShockwaveEffect[],
 ): boolean {
   if (unit.wadjetCastTimeLeft <= 0) return false
 
@@ -201,9 +210,6 @@ export function tickWadjetCast(
       applySweepDamage(unit, units, unit.wadjetCastAimAngle)
       unit.wadjetSweepStrikesDone = 2
       spawnSweepVisual(coneStrikes, unit, unit.wadjetCastAimAngle)
-      spawnShockwave(shockwaves, unit.team, unit.x, unit.y, c.sweepConeLength * 0.35, 0.3)
-      const sw = shockwaves[shockwaves.length - 1]
-      if (sw) sw.kind = 'sand'
     }
   }
 
